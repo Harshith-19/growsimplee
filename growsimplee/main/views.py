@@ -9,10 +9,6 @@ import requests
 
 # Create your views here.
 
-def home(request):
-    a = master()
-    return JsonResponse({"a" : a})
-
 class start(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):
     queryset = Driver.objects.all()
     serializer_class = DriverSerializer
@@ -27,7 +23,7 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIV
             productDict[dataframe1['product_id'][ind]]["sourceAddress"]=dataframe1['address'][ind]
         for ind in dataframe2.index:
             try:
-                productDict[dataframe1['product_id'][ind]]["destinationAddress"]=dataframe1['address'][ind] 
+                productDict[dataframe1['product_id'][ind]]["destinationAddress"]=dataframe2['address'][ind] 
             except:
                 continue
         return productDict
@@ -38,32 +34,40 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIV
         res = requests.get(endpoint)
         if res.status_code not in range(200, 299):
             return None, None
-        results = res.json()['results'][0]
-        lat = results['geometry']['location']['lat']
-        long = results['geometry']['location']['lng']
-        return lat, long
+        try:
+            results = res.json()['results'][0]
+            lat = results['geometry']['location']['lat']
+            long = results['geometry']['location']['lng']
+            return lat, long
+        except:
+            return None, None
     
     def getproduct(self):
         productDetails = self.load()
-        count = 0
+        removeList = []
         for i in productDetails.keys():
-            if (count == 0):
-                sourcelat, sourcelong = self.getLatLong(productDetails[i]['sourceAddress'])
-                destlat, destlong = self.getLatLong(productDetails[i]['destinationAddress'])
+            sourcelat, sourcelong = self.getLatLong(productDetails[i]['sourceAddress'])
+            destlat, destlong = self.getLatLong(productDetails[i]['destinationAddress'])
+            if (sourcelat == None or sourcelong == None or destlat == None or destlong == None):
+                removeList.append(i)
+            else:
                 productDetails[i]['sourceLatitude'] = sourcelat
                 productDetails[i]['sourceLongitude'] = sourcelong
                 productDetails[i]['destinationLatitude'] = destlat
                 productDetails[i]['destinationLongitude'] = destlong
-                count = 1 
+        for i in removeList:
+            del productDetails[i]
         return productDetails
     
-    def get(self, request):
+    def post(self, request):
         productDetails = self.getproduct()
-        serializer = ProductSerializer(data=productDetails.values(), many=True)
+        serializer = ProductSerializer(data = list(productDetails.values()), many=True)
         if serializer.is_valid():
             serializer.save()
             headers = self.get_success_headers(serializer.data)
-            return response.Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+            result = master()
+            print(result)
+            return response.Response(result, status=status.HTTP_201_CREATED, headers=headers)
     
 
 

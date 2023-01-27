@@ -19,3 +19,4 @@ class Driver(models.Model):
     person = models.CharField(max_length=200,null=True,blank=True)
     path = models.CharField(max_length=200,null=True,blank=True)
     active = models.BooleanField(default=True)
+    assigned = models.BooleanField(default=False)
