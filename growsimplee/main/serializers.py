@@ -1,11 +1,6 @@
 from rest_framework import serializers
 from .models import Product, Driver
 
-class ProductSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Product
-        fields = '__all__'
-
 class UpdateListSerializer(serializers.ListSerializer):
   
     def update(self, instances, validated_data):      
@@ -15,6 +10,19 @@ class UpdateListSerializer(serializers.ListSerializer):
             for index, attrs in enumerate(validated_data)
         ]
         return result
+
+class ProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product 
+        fields = '__all__'
+
+class ProductUpdateSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Product
+        fields = '__all__'
+        read_only_fields = ("productID",)
+        list_serializer_class = UpdateListSerializer
 
 class DriverSerializer(serializers.ModelSerializer):
 

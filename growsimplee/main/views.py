@@ -1,12 +1,13 @@
 from django.http import JsonResponse
 from .algorithm import master
-from .serializers import ProductSerializer, DriverSerializer
+from .serializers import ProductSerializer, DriverSerializer, ProductUpdateSerializer
 from rest_framework import mixins, generics, status, response
 from .models import Product, Driver
 from growsimplee.settings import GOOGLE_API_KEY
 import pandas as pd
 import requests
 from django.db.models import Q
+import json
 
 # Create your views here.
 
@@ -15,7 +16,7 @@ def home(request):
     return JsonResponse({"a" : drivers[0].person})
 
 
-class start(mixins.ListModelMixin, mixins.UpdateModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):
+class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMixin, generics.GenericAPIView):
     queryset = Driver.objects.all()
     serializer_class = DriverSerializer
 
@@ -75,7 +76,7 @@ class start(mixins.ListModelMixin, mixins.UpdateModelMixin, mixins.CreateModelMi
             else:
                 instance = {
                     "person" : drivers[place].person,
-                    "path" : str(i),
+                    "path" : json.dumps(i),
                     "assigned" : True,
                 }
                 driverDict[drivers[place].person] = instance 
@@ -86,6 +87,28 @@ class start(mixins.ListModelMixin, mixins.UpdateModelMixin, mixins.CreateModelMi
             query |= item
         instances = Driver.objects.filter(query)
         return driverDict, instances
+    
+    def productupdate(self, driverDict):
+        productDict = {}
+        jsonDec = json.decoder.JSONDecoder()
+        for i in driverDict.keys():
+            path = jsonDec.decode(driverDict[i]["path"])
+            for j in path:
+                if j[1] == "s":
+                    instance = {
+                        "productID" : j[0],
+                        "person" : i,
+                        "assigned" : True, 
+                    }
+                    productDict[j[0]] = instance
+                else:
+                    pass
+        queries = [Q(productID=value) for value in list(productDict.keys())]
+        query = queries.pop()
+        for item in queries:
+            query |= item
+        instances = Product.objects.filter(query)
+        return productDict, instances
     
     def post(self, request):
         productDetails = self.getproduct()
@@ -98,8 +121,11 @@ class start(mixins.ListModelMixin, mixins.UpdateModelMixin, mixins.CreateModelMi
             serializer = self.get_serializer(instances, data=list(driverdetails.values()), many=True)
             if serializer.is_valid():
                 self.perform_update(serializer)
-                return response.Response(result, status=status.HTTP_201_CREATED, headers=headers)
-    
+                productDict, instances = self.productupdate(driverdetails)
+                serializer = ProductUpdateSerializer(instances, data=list(productDict.values()), many=True)
+                if serializer.is_valid():
+                    self.perform_update(serializer)
+                    return response.Response(result, status=status.HTTP_201_CREATED, headers=headers)
 
 
 class ProductView(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):

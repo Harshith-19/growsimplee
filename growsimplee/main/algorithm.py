@@ -26,11 +26,11 @@ def pathForSourceClusters(clusters):
         for j in clst:
             possible_pts.append(tuple([tuple(j),"s"]))
         possible_pts = list(set(possible_pts))
-        start = [0,0]    
+        start = [12.9156577,77.5994159]    
         while len(possible_pts) > 0:
             ind = 0
-            mnt = 1000000000
-            mnd = 1000000000
+            mnt = 10000000000000000
+            mnd = 10000000000000000
             for k in range(len(possible_pts)):
                 dist, time = euclid_dist(start[0], start[1], possible_pts[k][0][0], possible_pts[k][0][1])
                 if mnt > time:
@@ -64,11 +64,11 @@ def pathForDestinationClusters(clusters):
             for k in productIDs:
                 possible_pts.append(((k.sourceLatitude, k.sourceLongitude), "s", k.productID))
         possible_pts = list(set(possible_pts))
-        start = [0,0]    
+        start = [12.9156577,77.5994159]   
         while len(possible_pts) > 0:
             ind = 0
-            mnt = 1000000000
-            mnd = 1000000000
+            mnt = 10000000000000000
+            mnd = 10000000000000000
             for k in range(len(possible_pts)):
                 dist, time = euclid_dist(start[0], start[1], possible_pts[k][0][0], possible_pts[k][0][1])
                 if mnt > time:
