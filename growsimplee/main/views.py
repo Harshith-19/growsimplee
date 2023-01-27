@@ -9,6 +9,7 @@ import requests
 
 # Create your views here.
 
+
 class start(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):
     queryset = Driver.objects.all()
     serializer_class = DriverSerializer

@@ -18,6 +18,7 @@ def getDestinationPoints():
 def pathForSourceClusters(clusters):
     result = []
     distanceTravelled = 0
+    totalTime = 0
     for i in range(len(clusters)):
         clst = clusters[i]
         possible_pts = []
@@ -28,13 +29,16 @@ def pathForSourceClusters(clusters):
         start = [0,0]    
         while len(possible_pts) > 0:
             ind = 0
-            mn = 10000000 
+            mnt = 1000000000
+            mnd = 1000000000
             for k in range(len(possible_pts)):
-                dis = euclid_dist(start[0], start[1], possible_pts[k][0][0], possible_pts[k][0][1])
-                if mn > dis:
+                dist, time = euclid_dist(start[0], start[1], possible_pts[k][0][0], possible_pts[k][0][1])
+                if mnt > time:
                     ind = k
-                    mn = dis
-            distanceTravelled = distanceTravelled + mn
+                    mnt = time
+                    mnd = dist
+            distanceTravelled = distanceTravelled + mnd
+            totalTime = totalTime + mnt
             if (possible_pts[ind][1] == "s"):
                 productIDs = Product.objects.filter(sourceLatitude=possible_pts[ind][0][0], sourceLongitude=possible_pts[ind][0][1])
                 for k in productIDs:
@@ -45,11 +49,12 @@ def pathForSourceClusters(clusters):
             start = [possible_pts[ind][0][0], possible_pts[ind][0][1]]
             possible_pts.remove(possible_pts[ind])
         result.append(ans)
-    return {"distanceTravelled" : distanceTravelled, "result" : result}
+    return {"distanceTravelled" : distanceTravelled, "result" : result, "TotalDuration" : totalTime}
 
 def pathForDestinationClusters(clusters):
     result = []
     distanceTravelled = 0
+    totalTime = 0
     for i in range(len(clusters)):
         clst = clusters[i]
         possible_pts = []
@@ -62,13 +67,15 @@ def pathForDestinationClusters(clusters):
         start = [0,0]    
         while len(possible_pts) > 0:
             ind = 0
-            mn = 10000000 
+            mnt = 1000000000
+            mnd = 1000000000
             for k in range(len(possible_pts)):
-                dis = euclid_dist(start[0], start[1], possible_pts[k][0][0], possible_pts[k][0][1])
-                if mn > dis:
+                dist, time = euclid_dist(start[0], start[1], possible_pts[k][0][0], possible_pts[k][0][1])
+                if mnt > time:
                     ind = k
-                    mn = dis
-            distanceTravelled = distanceTravelled + mn
+                    mnt = time
+            distanceTravelled = distanceTravelled + mnd
+            totalTime = totalTime + mnt
             if (possible_pts[ind][1] == "s"):
                 ans.append([possible_pts[ind][2], "s"])
                 productDestination = Product.objects.get(productID=possible_pts[ind][2])
@@ -78,7 +85,7 @@ def pathForDestinationClusters(clusters):
             start = [possible_pts[ind][0][0], possible_pts[ind][0][1]]
             possible_pts.remove(possible_pts[ind])
         result.append(ans)
-    return {"distanceTravelled" : distanceTravelled, "result" : result}
+    return {"distanceTravelled" : distanceTravelled, "result" : result, "TotalDuration" : totalTime}
 
 def master():
     sourcePoints = getSourcePoints()
@@ -89,7 +96,7 @@ def master():
     destinationclusters = FindClusters(destinationmeans, destinationPoints)
     sourceresult = pathForSourceClusters(sourceclusters)
     destinationresult = pathForDestinationClusters(destinationclusters)
-    if sourceresult["distanceTravelled"] > destinationresult["distanceTravelled"]:
+    if sourceresult["TotalDuration"] > destinationresult["TotalDuration"]:
         finalResult = destinationresult
     else:
         finalResult = sourceresult
