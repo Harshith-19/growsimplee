@@ -6,11 +6,16 @@ from .models import Product, Driver
 from growsimplee.settings import GOOGLE_API_KEY
 import pandas as pd
 import requests
+from django.db.models import Q
 
 # Create your views here.
 
+def home(request):
+    drivers = Driver.objects.all()
+    return JsonResponse({"a" : drivers[0].person})
 
-class start(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):
+
+class start(mixins.ListModelMixin, mixins.UpdateModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):
     queryset = Driver.objects.all()
     serializer_class = DriverSerializer
 
@@ -60,6 +65,28 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIV
             del productDetails[i]
         return productDetails
     
+    def assigndrivers(self, result):
+        drivers = Driver.objects.filter(assigned=False)
+        driverDict = {}
+        place = 0
+        for i in result["result"]:
+            if (i == []):
+                pass 
+            else:
+                instance = {
+                    "person" : drivers[place].person,
+                    "path" : str(i),
+                    "assigned" : True,
+                }
+                driverDict[drivers[place].person] = instance 
+                place += 1
+        queries = [Q(person=value) for value in list(driverDict.keys())]
+        query = queries.pop()
+        for item in queries:
+            query |= item
+        instances = Driver.objects.filter(query)
+        return driverDict, instances
+    
     def post(self, request):
         productDetails = self.getproduct()
         serializer = ProductSerializer(data = list(productDetails.values()), many=True)
@@ -67,8 +94,11 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIV
             serializer.save()
             headers = self.get_success_headers(serializer.data)
             result = master()
-            print(result)
-            return response.Response(result, status=status.HTTP_201_CREATED, headers=headers)
+            driverdetails, instances = self.assigndrivers(result)
+            serializer = self.get_serializer(instances, data=list(driverdetails.values()), many=True)
+            if serializer.is_valid():
+                self.perform_update(serializer)
+                return response.Response(result, status=status.HTTP_201_CREATED, headers=headers)
     
 
 
