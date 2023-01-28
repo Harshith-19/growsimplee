@@ -5,6 +5,7 @@ from django.db import models
 class Product(models.Model):
     productID = models.CharField(max_length=200)
     volume = models.FloatField(null=True,blank=True)
+    picked = models.BooleanField(default=False)
     delivered = models.BooleanField(default=False)
     assigned = models.BooleanField(default=False)
     flagged = models.BooleanField(default=False)
@@ -22,6 +23,8 @@ class Product(models.Model):
 class Driver(models.Model):
     person = models.CharField(max_length=200,null=True,blank=True)
     path = models.TextField(null=True,blank=True)
+    currentVisitedPoint = models.TextField(null=True, blank=True)
+    nextPoint = models.TextField(null=True, blank=True)
     active = models.BooleanField(default=True)
     assigned = models.BooleanField(default=False)
 

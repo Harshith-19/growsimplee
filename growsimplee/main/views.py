@@ -1,5 +1,5 @@
 from django.http import JsonResponse
-from .algorithm import master, dynamicPointAddition, dynamicPointDeletion
+from .algorithm import master, dynamicPointAddition, dynamicPointDeletion, processDriverReached
 from .serializers import ProductSerializer, DriverUpdateSerializer, ProductUpdateSerializer
 from rest_framework import mixins, generics, status, response
 from .models import Product, Driver
@@ -245,6 +245,34 @@ class RemoveProductView(mixins.ListModelMixin, mixins.UpdateModelMixin, generics
             self.perform_update(serializer)
             products, instances = self.getproduct(request)
             serializer = ProductUpdateSerializer(instances, data=list(products.values()), many=True)
+            if serializer.is_valid():
+                self.perform_update(serializer)
+                return response.Response(status=status.HTTP_200_OK)
+
+class PickedUpView(mixins.UpdateModelMixin, generics.GenericAPIView):
+    queryset = Driver.objects.all()
+    serializer_class = DriverUpdateSerializer
+
+    def productProcess(self, request):
+        detail = request.data
+        productDict = {}
+        productDict['productID'] = detail['productID']
+        productDict['picked'] = True  
+        instance = Product.objects.get(productID=productDict['productID'])
+        return productDict, instance   
+    
+    def driverProcess(self, request):
+        driverDict = processDriverReached(request.data, 'source')
+        instance = Driver.objects.get(person=driverDict['person'])
+        return driverDict, instance
+
+    def post(self, request):
+        driverDict, instance = self.driverProcess(request)
+        serializer = self.get_serializer(instance, data=driverDict)
+        if serializer.is_valid():
+            self.perform_update(serializer)
+            productDict, instance = self.productProcess(request)
+            serializer = ProductUpdateSerializer(instance, data=productDict)
             if serializer.is_valid():
                 self.perform_update(serializer)
                 return response.Response(status=status.HTTP_200_OK)
