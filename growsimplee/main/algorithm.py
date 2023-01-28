@@ -144,6 +144,7 @@ def driverDetails(add):
             driverPath = jsondec.decode(i.path)
         else:
             driverPath = []
+        instance = {}
         if (add == True):
             currentPoint = getcurrentPoint(driverPath)
             details = getLocations(driverPath, currentPoint)
@@ -258,7 +259,8 @@ def dynamicPointAddition():
         products[i.productID] = instance
     return drivers, products
 
-def dynamicPointDeletion(productIDList):
+def dynamicPointDeletion(productIDDict):
+    productIDList = [j['productID'] for j in productIDDict]
     drivers = driverDetails(False)
     for i in drivers.keys():
         drivers[i]["originalPath"] = [j for j in drivers[i]["originalPath"] if j[0] not in productIDList]

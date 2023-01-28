@@ -7,6 +7,7 @@ class Product(models.Model):
     volume = models.FloatField(null=True,blank=True)
     delivered = models.BooleanField(default=False)
     assigned = models.BooleanField(default=False)
+    flagged = models.BooleanField(default=False)
     sourceAddress = models.CharField(max_length=200,null=True,blank=True)
     sourceLatitude = models.FloatField(null=True,blank=True)
     sourceLongitude = models.FloatField(null=True,blank=True)

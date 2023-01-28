@@ -1,5 +1,5 @@
 from django.http import JsonResponse
-from .algorithm import master, dynamicPointAddition
+from .algorithm import master, dynamicPointAddition, dynamicPointDeletion
 from .serializers import ProductSerializer, DriverUpdateSerializer, ProductUpdateSerializer
 from rest_framework import mixins, generics, status, response
 from .models import Product, Driver
@@ -208,3 +208,43 @@ class ProductView(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateM
                 if serializer.is_valid():
                     self.perform_update(serializer)
                     return response.Response(serializer.data, status=status.HTTP_201_CREATED)
+
+class RemoveProductView(mixins.ListModelMixin, mixins.UpdateModelMixin, generics.GenericAPIView):
+    queryset = Driver.objects.all()
+    serializer_class = DriverUpdateSerializer
+
+    def getproduct(self, request):
+        products = request.data
+        productDict = {}
+        for i in products:
+            productDict[i['productID']] = i
+            productDict[i['productID']]['flagged'] = True
+        queries = [Q(productID=value) for value in list(productDict.keys())]
+        query = queries.pop()
+        for item in queries:
+            query |= item
+        instances = Product.objects.filter(query)
+        return productDict, instances
+    
+    def driverupdate(self, request):
+        drivers = dynamicPointDeletion(request.data)
+        for i in drivers.keys():
+            drivers[i]['path'] = json.dumps(drivers[i]['originalPath'])
+            del drivers[i]['originalPath']
+        queries = [Q(person=value) for value in list(drivers.keys())]
+        query = queries.pop()
+        for item in queries:
+            query |= item
+        instances = Driver.objects.filter(query)
+        return drivers, instances
+
+    def post(self, request):
+        drivers, instances = self.driverupdate(request)
+        serializer = self.get_serializer(instances, data=list(drivers.values()), many=True)
+        if serializer.is_valid():
+            self.perform_update(serializer)
+            products, instances = self.getproduct(request)
+            serializer = ProductUpdateSerializer(instances, data=list(products.values()), many=True)
+            if serializer.is_valid():
+                self.perform_update(serializer)
+                return response.Response(status=status.HTTP_200_OK)
