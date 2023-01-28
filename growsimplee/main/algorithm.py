@@ -1,5 +1,6 @@
 from .models import Product, Driver
 from .utils import *
+import json
 
 def getSourcePoints():
     nonDeliveredProducts = Product.objects.filter(assigned=False)
@@ -103,6 +104,8 @@ def master():
     return finalResult
 
 def getcurrentPoint(path):
+    if len(path) == 0:
+        return -1
     for i, item in enumerate(path):
         itemDelivered = Product.objects.get(productID=item[0]).delivered
         if itemDelivered == True:
@@ -112,6 +115,8 @@ def getcurrentPoint(path):
     return len(path)
 
 def getLocations(driverPath, currentPoint):
+    if (len(driverPath) == 0):
+        return (-1, -1)
     newPath = driverPath[0:currentPoint]
     locations = []
     for i, item in enumerate(driverPath[currentPoint:]):
@@ -134,14 +139,16 @@ def driverDetails(add):
     drivers = Driver.objects.filter(active=True)
     driverDetails = {}
     for i in drivers:
-        driverPath = i.path
+        if len(i.path) != 0:
+            jsondec = json.decoder.JSONDecoder()
+            driverPath = jsondec.decode(i.path)
+        else:
+            driverPath = []
         if (add == True):
             currentPoint = getcurrentPoint(driverPath)
             details = getLocations(driverPath, currentPoint)
             locations = details[1]
-            newpath = details[0]
             instance = {
-                "newPath" : newpath,
                 "locations" : locations,
                 "driver" : i,
                 "currentPoint" : currentPoint
@@ -153,66 +160,103 @@ def driverDetails(add):
 def dynamicPointAddition():
     nonDeliveredProducts = Product.objects.filter(assigned=False)
     drivers = driverDetails(True)
+    products = {}
     for i in nonDeliveredProducts:
-        ProductInstance = Product.objects.get(productID=i.productID, locationtype=True)
         tempMap = {}
         for j in drivers.keys():
-            comp1 = [10000000, -1]
-            for k, item in enumerate(drivers[j]["locations"]):
-                distance = euclid_dist(item["latitude"], item["longitude"], ProductInstance.sourceLatitude, ProductInstance.sourceLongitude)
-                if (k != len(drivers[j]["locations"])-1):
-                    distance = distance + euclid_dist(ProductInstance.sourceLatitude, ProductInstance.sourceLongitude, drivers[j]["locations"][k+1]["latitude"], drivers[j]["locations"][k+1]["longitude"])
-                    distance = distance - euclid_dist(item["latitude"], item["longitude"], drivers[j]["locations"][k+1]["latitude"], drivers[j]["locations"][k+1]["longitude"])
-                if (distance < comp1[0]):
-                    comp1[0] = distance 
-                    comp1[1] = k
-            comp2 = [10000000, -1]
-            for k, item in enumerate(drivers[j]["locations"][comp1[1]:]):
-                if (k == 0):
-                    distance = euclid_dist(ProductInstance.sourceLatitude, ProductInstance.sourceLongitude, ProductInstance.destinationLatitude, ProductInstance.destinationLongitude)
-                else:
-                    distance = euclid_dist(item["latitude"], item["longitude"], ProductInstance.destinationLatitude, ProductInstance.destinationLongitude)
-                if (k != len(drivers[j]["locations"][comp1[1]:])-1):
-                    distance = distance + euclid_dist(ProductInstance.destinationLatitude, ProductInstance.destinationLongitude, drivers[j]["locations"][comp1[1]:][k+1]["latitude"], drivers[j]["locations"][comp1[1]:][k+1]["longitude"])
-                    if k == 0:
-                        distance = distance - euclid_dist(ProductInstance.sourceLatitude, ProductInstance.sourceLongitude, drivers[j]["locations"][comp1[1]:][k+1]["latitude"], drivers[j]["locations"][comp1[1]:][k+1]["longitude"])
+            comp1 = [100000000000, -1, -1]
+            if (drivers[j]["locations"] == -1):
+                start = [12.9156577,77.5994159]
+                distance, time = euclid_dist(start[0], start[1], i.sourceLatitude, i.sourceLongitude)
+                dist, tim = euclid_dist(i.sourceLatitude, i.sourceLongitude, i.destinationLatitude, i.destinationLongitude)
+                distance += dist
+                time += tim
+                tempMap[j] = {
+                    "driver" : i,
+                    "distance" : distance,
+                    "index1" : -1,
+                    "index2" : -1,
+                    "time" : time,
+                }
+            else:
+                for k, item in enumerate(drivers[j]["locations"]):
+                    distance, time = euclid_dist(item["latitude"], item["longitude"], i.sourceLatitude, i.sourceLongitude)
+                    if (k != len(drivers[j]["locations"])-1):
+                        dist, tim = euclid_dist(i.sourceLatitude, i.sourceLongitude, drivers[j]["locations"][k+1]["latitude"], drivers[j]["locations"][k+1]["longitude"])
+                        distance += dist
+                        time += tim
+                        dist, tim = euclid_dist(item["latitude"], item["longitude"], drivers[j]["locations"][k+1]["latitude"], drivers[j]["locations"][k+1]["longitude"])
+                        distance -= dist
+                        time -= tim 
+                    if (time < comp1[0]):
+                        comp1[0] = time 
+                        comp1[1] = k
+                        comp1[2] = distance
+                comp2 = [100000000000, -1, -1]
+                for k, item in enumerate(drivers[j]["locations"][comp1[1]:]):
+                    if (k == 0):
+                        distance, time = euclid_dist(i.sourceLatitude, i.sourceLongitude, i.destinationLatitude, i.destinationLongitude)
                     else:
-                        distance = distance - euclid_dist(item["latitude"], item["longitude"], drivers[j]["locations"][k+1]["latitude"], drivers[j]["locations"][k+1]["longitude"])
-                if (distance < comp2[0]):
-                    comp2[0] = distance 
-                    comp2[1] = k
-            tempMap[j] = {
-                "driver" : i,
-                "distance" : comp1[0]+comp2[0],
-                "index1" : comp1[1],
-                "index2" : comp2[1]
-            }
-        mn = 10000000
+                        distance, time = euclid_dist(item["latitude"], item["longitude"], i.destinationLatitude, i.destinationLongitude)
+                    if (k != len(drivers[j]["locations"][comp1[1]:])-1):
+                        dist, tim = euclid_dist(i.destinationLatitude, i.destinationLongitude, drivers[j]["locations"][comp1[1]:][k+1]["latitude"], drivers[j]["locations"][comp1[1]:][k+1]["longitude"])
+                        distance += dist
+                        time += tim
+                        if k == 0:
+                            dist, tim = euclid_dist(i.sourceLatitude, i.sourceLongitude, drivers[j]["locations"][comp1[1]:][k+1]["latitude"], drivers[j]["locations"][comp1[1]:][k+1]["longitude"])
+                            distance -= dist
+                            time -= tim
+                        else:
+                            dist, tim = euclid_dist(item["latitude"], item["longitude"], drivers[j]["locations"][k+1]["latitude"], drivers[j]["locations"][k+1]["longitude"])
+                            distance -= dist
+                            time -= tim
+                    if (time < comp2[0]):
+                        comp2[0] = time 
+                        comp2[1] = k
+                        comp2[2] = distance
+                tempMap[j] = {
+                    "driver" : i,
+                    "distance" : comp1[2]+comp2[2],
+                    "index1" : comp1[1],
+                    "index2" : comp2[1],
+                    "time" : comp1[0]+comp2[0],
+                }
+        mn = 100000000000
         driver = None
         for j in tempMap.keys():
-            if (tempMap[j]["distance"] < mn):
-                mn = tempMap[j]["distance"]
+            if (tempMap[j]["time"] < mn):
+                mn = tempMap[j]["time"]
                 driver = j
         a = drivers[driver]["currentPoint"]
         b = tempMap[driver]["index1"]
         c = tempMap[driver]["index2"]
-        sourceProductList = [[ProductInstance.productID, "s"]]
-        destinationProductList = [[ProductInstance.productID, "d"]]
+        sourceProductList = [[i.productID, "s"]]
+        destinationProductList = [[i.productID, "d"]]
         sourcePointList = [
             {
-                "latitude" : ProductInstance.sourceLatitude,
-                "longitude" : ProductInstance.sourceLongitude,
+                "latitude" : i.sourceLatitude,
+                "longitude" : i.sourceLongitude,
             }
         ]
         destinationPointList = [
             {
-                "latitude" : ProductInstance.destinationLatitude,
-                "longitude" : ProductInstance.destinationLongitude,
+                "latitude" : i.destinationLatitude,
+                "longitude" : i.destinationLongitude,
             }
         ]
-        drivers[driver]["originalPath"] = drivers[driver]["originalPath"][0:a+b+1] + sourceProductList + drivers[driver]["originalPath"][a+b+1:a+b+c+1] + destinationProductList + drivers[driver]["originalPath"][a+b+c+1:]
-        drivers[driver]["locations"] = drivers[driver]["locations"][0:b+1] + sourcePointList + drivers[driver]["locations"][b+1:b+c+1] + destinationPointList + drivers[driver]["locations"][b+c+1:]
-    return drivers
+        if (b == -1 and c == -1):
+            drivers[driver]["originalPath"] = sourceProductList + destinationProductList
+            drivers[driver]["locations"] = sourcePointList + destinationPointList
+        else:
+            drivers[driver]["originalPath"] = drivers[driver]["originalPath"][0:a+b+1] + sourceProductList + drivers[driver]["originalPath"][a+b+1:a+b+c+1] + destinationProductList + drivers[driver]["originalPath"][a+b+c+1:]
+            drivers[driver]["locations"] = drivers[driver]["locations"][0:b+1] + sourcePointList + drivers[driver]["locations"][b+1:b+c+1] + destinationPointList + drivers[driver]["locations"][b+c+1:]
+        instance = {
+            "productID" : i.productID,
+            "person" : driver,
+            "assigned" : True,
+        }
+        products[i.productID] = instance
+    return drivers, products
 
 def dynamicPointDeletion(productIDList):
     drivers = driverDetails(False)

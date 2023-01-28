@@ -1,6 +1,6 @@
 from django.http import JsonResponse
-from .algorithm import master
-from .serializers import ProductSerializer, DriverSerializer, ProductUpdateSerializer
+from .algorithm import master, dynamicPointAddition
+from .serializers import ProductSerializer, DriverUpdateSerializer, ProductUpdateSerializer
 from rest_framework import mixins, generics, status, response
 from .models import Product, Driver
 from growsimplee.settings import GOOGLE_API_KEY
@@ -18,7 +18,7 @@ def home(request):
 
 class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMixin, generics.GenericAPIView):
     queryset = Driver.objects.all()
-    serializer_class = DriverSerializer
+    serializer_class = DriverUpdateSerializer
 
     def load(self):
         dataframe1 = pd.read_excel('bangalore_pickups.xlsx')
@@ -128,9 +128,64 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMi
                     return response.Response(result, status=status.HTTP_201_CREATED, headers=headers)
 
 
-class ProductView(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):
-    queryset = Product.objects.all()
-    serializer_class = ProductSerializer
+class ProductView(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMixin, generics.GenericAPIView):
+    queryset = Driver.objects.all()
+    serializer_class = DriverUpdateSerializer
+
+    def getLatLong(self, address):
+        baseurl = "https://maps.googleapis.com/maps/api/geocode/json"
+        endpoint = f"{baseurl}?address={address}&key={GOOGLE_API_KEY}"
+        res = requests.get(endpoint)
+        print(res.json())
+        if res.status_code not in range(200, 299):
+            return None, None
+        try:
+            results = res.json()['results'][0]
+            lat = results['geometry']['location']['lat']
+            long = results['geometry']['location']['lng']
+            return lat, long
+        except:
+            return None, None
+    
+    def getproduct(self, request):
+        productDetails = request.data
+        products = {}
+        removeList = []
+        for i in productDetails:
+            products[i["productID"]] = i
+            sourcelat, sourcelong = self.getLatLong(products[i["productID"]]['sourceAddress'])
+            destlat, destlong = self.getLatLong(products[i["productID"]]['destinationAddress'])
+            if (sourcelat == None or sourcelong == None or destlat == None or destlong == None):
+                removeList.append(i["productID"])
+            else:
+                products[i["productID"]]['sourceLatitude'] = sourcelat
+                products[i["productID"]]['sourceLongitude'] = sourcelong
+                products[i["productID"]]['destinationLatitude'] = destlat
+                products[i["productID"]]['destinationLongitude'] = destlong
+        for i in removeList:
+            del products[i]
+        return products
+
+    def driverupdate(self, drivers):
+        for i in drivers.keys():
+            drivers[i]['path'] = json.dumps(drivers[i]['originalPath'])
+            del drivers[i]['originalPath']
+            del drivers[i]['locations']
+            del drivers[i]['currentPoint']
+        queries = [Q(person=value) for value in list(drivers.keys())]
+        query = queries.pop()
+        for item in queries:
+            query |= item
+        instances = Driver.objects.filter(query)
+        return drivers, instances
+    
+    def productupdate(self, products):
+        queries = [Q(productID=value) for value in list(products.keys())]
+        query = queries.pop()
+        for item in queries:
+            query |= item
+        instances = Product.objects.filter(query)
+        return products, instances
 
     def get(self, request):
         products = Product.objects.all()
@@ -138,8 +193,18 @@ class ProductView(mixins.ListModelMixin, mixins.CreateModelMixin, generics.Gener
         return response.Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request):
-        serializer = self.get_serializer(data = request.data, many=True)
+        products = self.getproduct(request)
+        print(products)
+        serializer = ProductSerializer(data = list(products.values()), many=True)
         if serializer.is_valid():
             serializer.save()
-            headers = self.get_success_headers(serializer.data)
-            return response.Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+            driverallocation, productallocation = dynamicPointAddition()
+            driverdetails, instances = self.driverupdate(driverallocation)
+            serializer = self.get_serializer(instances, data=list(driverdetails.values()), many=True)
+            if serializer.is_valid():
+                self.perform_update(serializer)
+                productdetails, instances = self.productupdate(productallocation)
+                serializer = ProductUpdateSerializer(instances, data=list(productdetails.values()), many=True)
+                if serializer.is_valid():
+                    self.perform_update(serializer)
+                    return response.Response(serializer.data, status=status.HTTP_201_CREATED)
