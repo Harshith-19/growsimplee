@@ -249,7 +249,7 @@ class RemoveProductView(mixins.ListModelMixin, mixins.UpdateModelMixin, generics
                 self.perform_update(serializer)
                 return response.Response(status=status.HTTP_200_OK)
 
-class PickedUpView(mixins.UpdateModelMixin, generics.GenericAPIView):
+class ReachedView(mixins.UpdateModelMixin, generics.GenericAPIView):
     queryset = Driver.objects.all()
     serializer_class = DriverUpdateSerializer
 
@@ -257,12 +257,15 @@ class PickedUpView(mixins.UpdateModelMixin, generics.GenericAPIView):
         detail = request.data
         productDict = {}
         productDict['productID'] = detail['productID']
-        productDict['picked'] = True  
+        if detail['type'] == 'source':
+            productDict['picked'] = True
+        elif detail['type'] == 'destination':
+            productDict['delivered'] = True  
         instance = Product.objects.get(productID=productDict['productID'])
         return productDict, instance   
     
     def driverProcess(self, request):
-        driverDict = processDriverReached(request.data, 'source')
+        driverDict = processDriverReached(request.data)
         instance = Driver.objects.get(person=driverDict['person'])
         return driverDict, instance
 
@@ -276,3 +279,92 @@ class PickedUpView(mixins.UpdateModelMixin, generics.GenericAPIView):
             if serializer.is_valid():
                 self.perform_update(serializer)
                 return response.Response(status=status.HTTP_200_OK)
+
+class ValidateImageView(mixins.UpdateModelMixin, generics.GenericAPIView):
+    queryset = Driver.objects.all()
+    serializer_class = DriverUpdateSerializer
+
+class ManualEditView(mixins.UpdateModelMixin, mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):
+    queryset = Driver.objects.all()
+    serializer_class = DriverUpdateSerializer
+
+    def getLatLong(self, address):
+        baseurl = "https://maps.googleapis.com/maps/api/geocode/json"
+        endpoint = f"{baseurl}?address={address}&key={GOOGLE_API_KEY}"
+        res = requests.get(endpoint)
+        if res.status_code not in range(200, 299):
+            return None, None
+        try:
+            results = res.json()['results'][0]
+            lat = results['geometry']['location']['lat']
+            long = results['geometry']['location']['lng']
+            return lat, long
+        except:
+            return None, None
+
+    def driverProcess(self, data):
+        DriverDict = {}
+        for i, item in enumerate(data):
+            DriverDict[item['person']] = {}
+            DriverDict[item['person']]['person'] = item['person']
+            DriverDict[item['person']]['path'] = json.dumps(item['path'])
+            currentVisitedPoint = Driver.objects.get(person = item['person']).currentVisitedPoint
+            jsondeco = json.decoder.JSONDecoder()
+            currentVisitedPoint = jsondeco.decode(currentVisitedPoint)
+            nextPoint = []
+            for j, it in enumerate(item['path']):
+                if (it == currentVisitedPoint):
+                    if (j == len(item['path'])-1):
+                        nextPoint = []
+                    else:
+                        nextPoint = item['path'][j+1]
+                    break
+            DriverDict[item['person']]['nextPoint'] = json.dumps(nextPoint)
+        queries = [Q(person=value) for value in list(DriverDict.keys())]
+        query = queries.pop()
+        for item in queries:
+            query |= item
+        instances = Driver.objects.filter(query)
+        return DriverDict, instances
+    
+    def productProcess(self, data):
+        ProductDict = {}
+        ProductDict['c'] = {}
+        ProductDict['nc'] = {}
+        for i, item in enumerate(data):
+            productList = item['product']
+            for j, it in enumerate(productList):
+                ProductDict['c'][it['productID']] = {}
+                ProductDict['c'][it['productID']]['productID'] = it['productID']
+                if (it['type'] == 'c'):
+                   ProductDict['c'][it['productID']]['sourceAddress'] = it['sourceAddress']
+                   ProductDict['c'][it['productID']]['destinationAddress'] = it['destinationAddress']
+                   ProductDict['c'][it['productID']]['sourceLatitude'], ProductDict['c'][it['productID']]['sourceLongitude'] = self.getLatLong(it['sourceAddress'])
+                   ProductDict['c'][it['productID']]['destinationLatitude'], ProductDict['c'][it['productID']]['destinationLongitude'] = self.getLatLong(it['destinationAddress'])
+                   ProductDict['c'][it['productID']]['assigned'] = True
+                   ProductDict['c'][it['productID']]['person'] = item['person']
+                elif (it['type'] == 'd'):
+                   ProductDict['nc'][it['productID']]['flagged'] = True
+                elif (it['type'] == 'm'):
+                   ProductDict['nc'][it['productID']]['person'] = item['person']
+        queries = [Q(productID=value) for value in list(ProductDict['nc'].keys())]
+        query = queries.pop()
+        for item in queries:
+            query |= item
+        instances = Product.objects.filter(query)
+        return ProductDict, instances  
+    
+    def post(self, request):
+        data = request.data
+        driverDict, instances = self.driverProcess(data)
+        serializer = self.get_serializer(instances, data=list(driverDict.values()), many=True)
+        if serializer.is_valid():
+            self.perform_update(serializer)
+            ProductDict, instances = self.productProcess(data)
+            serializer = ProductUpdateSerializer(instances, data=list(ProductDict['nc'].values()), many=True)
+            if serializer.is_valid():
+                self.perform_update(serializer)
+                serializer = ProductSerializer(data = list(ProductDict['c'].values()), many=True)
+                if serializer.is_valid():
+                    serializer.save()
+                    return response.Response(status=status.HTTP_200_OK)

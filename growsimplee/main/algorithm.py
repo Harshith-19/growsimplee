@@ -266,13 +266,13 @@ def dynamicPointDeletion(productIDDict):
         drivers[i]["originalPath"] = [j for j in drivers[i]["originalPath"] if j[0] not in productIDList]
     return drivers
 
-def processDriverReached(detail, type):
+def processDriverReached(detail):
     driverDict = {}
     driverDict['person'] = detail['person']
-    if (type == 'source'):
+    if (detail['type'] == 'source'):
         value = [detail['productID'], 's']
         driverDict['currentVisitedPoint'] = json.dumps(value)
-    elif (type == 'destination'):
+    elif (detail['type'] == 'destination'):
         value = [detail['productID'], 'd']
         driverDict['currentVisitedPoint'] = json.dumps(value)
     driverInstance = Driver.objects.get(person=detail['person'])
