@@ -24,6 +24,11 @@ class ProductUpdateSerializer(serializers.ModelSerializer):
         read_only_fields = ("productID",)
         list_serializer_class = UpdateListSerializer
 
+class DriverSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Driver 
+        fields = '__all__'
+
 class DriverUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:

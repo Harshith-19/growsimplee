@@ -1,6 +1,6 @@
 from django.http import JsonResponse
 from .algorithm import master, dynamicPointAddition, dynamicPointDeletion, processDriverReached
-from .serializers import ProductSerializer, DriverUpdateSerializer, ProductUpdateSerializer
+from .serializers import ProductSerializer, DriverUpdateSerializer, ProductUpdateSerializer, DriverSerializer
 from rest_framework import mixins, generics, status, response
 from .models import Product, Driver
 from growsimplee.settings import GOOGLE_API_KEY
@@ -8,6 +8,7 @@ import pandas as pd
 import requests
 from django.db.models import Q
 import json
+from .fixedValues import WAREHOUSE_ADDRESS
 
 # Create your views here.
 
@@ -32,7 +33,10 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMi
             try:
                 productDict[dataframe1['product_id'][ind]]["destinationAddress"]=dataframe2['address'][ind] 
             except:
-                continue
+                productDict[dataframe2['product_id'][ind]]={}
+                productDict[dataframe2['product_id'][ind]]["productID"]=dataframe2['product_id'][ind]
+                productDict[dataframe2['product_id'][ind]]["sourceAddress"]= WAREHOUSE_ADDRESS
+                productDict[dataframe2['product_id'][ind]]["destinationAddress"]=dataframe2['address'][ind]
         return productDict
     
     def getLatLong(self, address):
@@ -53,7 +57,10 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMi
         productDetails = self.load()
         removeList = []
         for i in productDetails.keys():
-            sourcelat, sourcelong = self.getLatLong(productDetails[i]['sourceAddress'])
+            if productDetails[i]['sourceAddress'] == WAREHOUSE_ADDRESS:
+                sourcelat, sourcelong = 13.0343, 77.6055
+            else:
+                sourcelat, sourcelong = self.getLatLong(productDetails[i]['sourceAddress'])
             destlat, destlong = self.getLatLong(productDetails[i]['destinationAddress'])
             if (sourcelat == None or sourcelong == None or destlat == None or destlong == None):
                 removeList.append(i)
@@ -88,6 +95,15 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMi
         instances = Driver.objects.filter(query)
         return driverDict, instances
     
+    def createDrivers(self, count):
+        alph = 'P'
+        counter = 1
+        DriverList = []
+        while (counter <= count):
+            DriverList.append({'person' : alph+str(counter), 'active' : True})
+            counter += 1
+        return DriverList
+    
     def productupdate(self, driverDict):
         productDict = {}
         jsonDec = json.decoder.JSONDecoder()
@@ -117,15 +133,19 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMi
             serializer.save()
             headers = self.get_success_headers(serializer.data)
             result = master()
-            driverdetails, instances = self.assigndrivers(result)
-            serializer = self.get_serializer(instances, data=list(driverdetails.values()), many=True)
+            driverlist = self.createDrivers(len(productDetails)//25)
+            serializer = DriverSerializer(data = driverlist, many=True)
             if serializer.is_valid():
-                self.perform_update(serializer)
-                productDict, instances = self.productupdate(driverdetails)
-                serializer = ProductUpdateSerializer(instances, data=list(productDict.values()), many=True)
+                serializer.save()
+                driverdetails, instances = self.assigndrivers(result)
+                serializer = self.get_serializer(instances, data=list(driverdetails.values()), many=True)
                 if serializer.is_valid():
                     self.perform_update(serializer)
-                    return response.Response(result, status=status.HTTP_201_CREATED, headers=headers)
+                    productDict, instances = self.productupdate(driverdetails)
+                    serializer = ProductUpdateSerializer(instances, data=list(productDict.values()), many=True)
+                    if serializer.is_valid():
+                        self.perform_update(serializer)
+                        return response.Response(result, status=status.HTTP_201_CREATED, headers=headers)
 
 
 class ProductView(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMixin, generics.GenericAPIView):

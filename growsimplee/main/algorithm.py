@@ -89,10 +89,11 @@ def pathForDestinationClusters(clusters):
     return {"distanceTravelled" : distanceTravelled, "result" : result, "TotalDuration" : totalTime}
 
 def master():
+    drivers = Driver.objects.filter(active=True).count()
     sourcePoints = getSourcePoints()
     destinationPoints = getDestinationPoints()
-    sourcemeans = CalculateMeans(5, sourcePoints)
-    destinationmeans = CalculateMeans(5, destinationPoints)
+    sourcemeans = CalculateMeans(drivers, sourcePoints)
+    destinationmeans = CalculateMeans(drivers, destinationPoints)
     sourceclusters = FindClusters(sourcemeans, sourcePoints)
     destinationclusters = FindClusters(destinationmeans, destinationPoints)
     sourceresult = pathForSourceClusters(sourceclusters)

@@ -1,3 +1,3 @@
 BAG_SIZE_1 = 80*80*100
 BAG_SIZE_2 = 60*60*100
-DRIVERS = 5
+WAREHOUSE_ADDRESS = '2JM4+P67, Kanaka Nagar, Hebbal, Bengaluru'
