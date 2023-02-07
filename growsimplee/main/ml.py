@@ -120,17 +120,19 @@ def findDis(pts1, pts2):
     ans = ((pts2[0] - pts1[0])**2 +  (pts2[1] - pts1[1])**2)**0.5
     return round(ans/10, 2)
 
+def getVolume(TopImgPath, SideImgPath):
+    wT, hT = findLength(TopImgPath)
+    wS, hS = findLength(SideImgPath, wP = 160, hP = 255)
 
-wT, hT = findLength("Top.jpg")
-wS, hS = findLength("Side.jpg", wP = 160, hP = 255)
+    # print("wT :", wT)
+    # print("hT :", hT)
+    # print("wS :", wS)
+    # print("hS :", hS)
 
-# print("wT :", wT)
-# print("hT :", hT)
-# print("wS :", wS)
-# print("hS :", hS)
+    height = (hT + hS) / 2
+    width = wT
+    length = wS
 
-height = (hT + hS) / 2
-width = wT
-length = wS
-
-volumetric_weight = (height * width * length) / 5000
+    volumetric_weight = (height * width * length) / 5000
+    
+    return volumetric_weight
