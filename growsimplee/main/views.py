@@ -12,7 +12,8 @@ from .fixedValues import WAREHOUSE_ADDRESS
 import os
 import base64
 from .ml import getVolume
-from graph import makeImg
+from .graph import makeImg
+from .utils import driverListResponse
 
 # Create your views here.
 
@@ -149,9 +150,21 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMi
                     longitude = Product.objects.get(productID=productId).destinationLongitude
                 lat_long.append(latitude)
                 lat_long.append(longitude)
-                list_of_lat_long.append[lat_long]
-            list_of_path_lat_long.append[list_of_lat_long]
+                list_of_lat_long.append(lat_long)
+            list_of_path_lat_long.append(list_of_lat_long)
         return list_of_path_lat_long
+    
+    def csvResponse(self, result):
+        a = result['result']
+        for i in a:
+            for j in i:
+                product = Product.objects.get(productID=j[0])
+                if (j[1]=='s'):
+                    j.append(product.sourceLatitude)
+                    j.append(product.sourceLongitude)
+                else:
+                    j.append(product.destinationLatitude)
+                    j.append(product.destinationLongitude)
             
 
     def post(self, request):
@@ -175,7 +188,8 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMi
                         self.perform_update(serializer)
                         list_of_paths = self.plotGraph(result)
                         makeImg(list_of_paths)
-                        return response.Response(result, status=status.HTTP_201_CREATED, headers=headers)
+                        res = driverListResponse()
+                        return response.Response(res, status=status.HTTP_201_CREATED, headers=headers)
 
 
 class ProductView(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMixin, generics.GenericAPIView):
@@ -238,9 +252,8 @@ class ProductView(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateM
         return products, instances
 
     def get(self, request):
-        products = Product.objects.all()
-        serializer = ProductSerializer(products, many=True)
-        return response.Response(serializer.data, status=status.HTTP_200_OK)
+        res = driverListResponse()
+        return response.Response(res, status=status.HTTP_200_OK)
 
     def post(self, request):
         products = self.getproduct(request)
