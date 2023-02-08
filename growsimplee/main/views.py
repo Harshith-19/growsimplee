@@ -12,6 +12,7 @@ from .fixedValues import WAREHOUSE_ADDRESS
 import os
 import base64
 from .ml import getVolume
+from graph import makeImg
 
 # Create your views here.
 
@@ -131,6 +132,28 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMi
         instances = Product.objects.filter(query)
         return productDict, instances
     
+    def plotGraph(self, result):
+        list_of_paths = result["result"]
+        list_of_path_lat_long = []
+        for path in list_of_paths:
+            list_of_lat_long = []
+            for point in path:
+                lat_long = []
+                if point[1] == 's':
+                    productId = point[0]
+                    latitude = Product.objects.get(productID=productId).sourceLatitude
+                    longitude = Product.objects.get(productID=productId).sourceLongitude
+                else :
+                    productId = point[0]
+                    latitude = Product.objects.get(productID=productId).destinationLatitude
+                    longitude = Product.objects.get(productID=productId).destinationLongitude
+                lat_long.append(latitude)
+                lat_long.append(longitude)
+                list_of_lat_long.append[lat_long]
+            list_of_path_lat_long.append[list_of_lat_long]
+        return list_of_path_lat_long
+            
+
     def post(self, request):
         productDetails = self.getproduct()
         serializer = ProductSerializer(data = list(productDetails.values()), many=True)
@@ -150,6 +173,8 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMi
                     serializer = ProductUpdateSerializer(instances, data=list(productDict.values()), many=True)
                     if serializer.is_valid():
                         self.perform_update(serializer)
+                        list_of_paths = self.plotGraph(result)
+                        makeImg(list_of_paths)
                         return response.Response(result, status=status.HTTP_201_CREATED, headers=headers)
 
 
