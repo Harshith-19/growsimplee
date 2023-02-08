@@ -1,13 +1,7 @@
 from .models import Product, Driver
 from .utils import *
 import json
-
-def getSourcePoints():
-    nonDeliveredProducts = Product.objects.filter(assigned=False)
-    sourceList = []
-    for i in nonDeliveredProducts:
-        sourceList.append([float(i.sourceLatitude), float(i.sourceLongitude)])
-    return sourceList
+from .fixedValues import WAREHOUSE_ADDRESS
 
 def getDestinationPoints():
     nonDeliveredProducts = Product.objects.filter(assigned=False)
@@ -16,43 +10,7 @@ def getDestinationPoints():
         destList.append([float(i.destinationLatitude), float(i.destinationLongitude)])
     return destList
 
-def pathForSourceClusters(clusters):
-    result = []
-    distanceTravelled = 0
-    totalTime = 0
-    for i in range(len(clusters)):
-        clst = clusters[i]
-        possible_pts = []
-        ans = []
-        for j in clst:
-            possible_pts.append(tuple([tuple(j),"s"]))
-        possible_pts = list(set(possible_pts))
-        start = [12.9156577,77.5994159]    
-        while len(possible_pts) > 0:
-            ind = 0
-            mnt = 10000000000000000
-            mnd = 10000000000000000
-            for k in range(len(possible_pts)):
-                dist, time = euclid_dist(start[0], start[1], possible_pts[k][0][0], possible_pts[k][0][1])
-                if mnt > time:
-                    ind = k
-                    mnt = time
-                    mnd = dist
-            distanceTravelled = distanceTravelled + mnd
-            totalTime = totalTime + mnt
-            if (possible_pts[ind][1] == "s"):
-                productIDs = Product.objects.filter(sourceLatitude=possible_pts[ind][0][0], sourceLongitude=possible_pts[ind][0][1])
-                for k in productIDs:
-                    ans.append([k.productID, "s"])
-                    possible_pts.append([[k.destinationLatitude, k.destinationLongitude], k.productID])
-            else:
-                ans.append([possible_pts[ind][1], "d"])
-            start = [possible_pts[ind][0][0], possible_pts[ind][0][1]]
-            possible_pts.remove(possible_pts[ind])
-        result.append(ans)
-    return {"distanceTravelled" : distanceTravelled, "result" : result, "TotalDuration" : totalTime}
-
-def pathForDestinationClusters(clusters):
+def pathForDestinationClusters(clusters, data):
     result = []
     distanceTravelled = 0
     totalTime = 0
@@ -65,13 +23,19 @@ def pathForDestinationClusters(clusters):
             for k in productIDs:
                 possible_pts.append(((k.sourceLatitude, k.sourceLongitude), "s", k.productID))
         possible_pts = list(set(possible_pts))
-        start = [12.9156577,77.5994159]   
+        startID = data["data"]["productAtHUb"]
+        startType = "sourceAddress"
         while len(possible_pts) > 0:
             ind = 0
             mnt = 10000000000000000
             mnd = 10000000000000000
             for k in range(len(possible_pts)):
-                dist, time = euclid_dist(start[0], start[1], possible_pts[k][0][0], possible_pts[k][0][1])
+                if possible_pts[k][1] == "s":
+                    value = "sourceAddress"
+                else:
+                    value = "destinationAddress"
+                dist = data["data"]["DistanceMatrix"][data["data"]["productIndexDict"][possible_pts[k][2]][value]][data["data"]["productIndexDict"][startID][startType]]
+                time = data["data"]["TimeMatrix"][data["data"]["productIndexDict"][possible_pts[k][2]][value]][data["data"]["productIndexDict"][startID][startType]]
                 if mnt > time:
                     ind = k
                     mnt = time
@@ -83,26 +47,100 @@ def pathForDestinationClusters(clusters):
                 possible_pts.append([[productDestination.destinationLatitude, productDestination.destinationLongitude], "d", possible_pts[ind][2]])
             else:
                 ans.append([possible_pts[ind][2], "d"])
-            start = [possible_pts[ind][0][0], possible_pts[ind][0][1]]
+            startID = possible_pts[ind][2]
+            if possible_pts[ind][1] == "s":
+                startType = "sourceAddress"
+            else:
+                startType = "destinationAddress"
             possible_pts.remove(possible_pts[ind])
         result.append(ans)
-    return {"distanceTravelled" : distanceTravelled, "result" : result, "TotalDuration" : totalTime}
+    return {"data" : {"distanceTravelled" : distanceTravelled, "result" : result, "TotalDuration" : totalTime}}
 
-def master():
-    drivers = Driver.objects.filter(active=True).count()
-    sourcePoints = getSourcePoints()
+def DistanceTimeMatrix():
+    products = Product.objects.all()
+    productIndexDict = {}
+    warehousedistanceDict = {}
+    productAtHub = None
+    for i in range(len(products)):
+        productIndexDict[products[i].productID] = {}
+        productIndexDict[products[i].productID]['sourceAddress'] = 2*i 
+        productIndexDict[products[i].productID]['destinationAddress'] = 2*i + 1
+    DistanceMatrix = [[0 for i in range(2*len(products))] for j in range(2*len(products))]
+    TimeMatrix = [[0 for i in range(2*len(products))] for j in range(2*len(products))]
+    for i in range(len(products)):
+        print(DistanceMatrix)
+        if ((products[i].sourceAddress == WAREHOUSE_ADDRESS) and (warehousedistanceDict.get(products[i].productID) != None)): 
+            if productAtHub == None:
+                productAtHub = products[i].productID
+            DistanceMatrix[productIndexDict[products[i].productID]['sourceAddress']][productIndexDict[products[i].productID]['destinationAddress']] = warehousedistanceDict[products[i].productID]["distance"]
+            TimeMatrix[productIndexDict[products[i].productID]['sourceAddress']][productIndexDict[products[i].productID]['destinationAddress']] = warehousedistanceDict[products[i].productID]["time"]
+            DistanceMatrix[productIndexDict[products[i].productID]['destinationAddress']][productIndexDict[products[i].productID]['sourceAddress']] = warehousedistanceDict[products[i].productID]["distance"]
+            TimeMatrix[productIndexDict[products[i].productID]['destinationAddress']][productIndexDict[products[i].productID]['sourceAddress']] = warehousedistanceDict[products[i].productID]["time"]
+        else:
+            distance, time = euclid_dist(products[i].sourceLatitude, products[i].sourceLongitude, products[i].destinationLatitude, products[i].destinationLongitude)
+            DistanceMatrix[productIndexDict[products[i].productID]['sourceAddress']][productIndexDict[products[i].productID]['destinationAddress']] = distance
+            TimeMatrix[productIndexDict[products[i].productID]['sourceAddress']][productIndexDict[products[i].productID]['destinationAddress']] = time
+            DistanceMatrix[productIndexDict[products[i].productID]['destinationAddress']][productIndexDict[products[i].productID]['sourceAddress']] = distance
+            TimeMatrix[productIndexDict[products[i].productID]['destinationAddress']][productIndexDict[products[i].productID]['sourceAddress']] = time
+            if (products[i].sourceAddress == WAREHOUSE_ADDRESS):
+                if productAtHub == None:
+                    productAtHub = products[i].productID
+                warehousedistanceDict[products[i].productID] = {}
+                warehousedistanceDict[products[i].productID]['distance'] = distance
+                warehousedistanceDict[products[i].productID]['time'] = time
+        for j in range(i, len(products)):
+            if ((products[i].sourceAddress == WAREHOUSE_ADDRESS) and (products[j].sourceAddress == WAREHOUSE_ADDRESS)):
+                distance, time = 0, 0
+            else:
+                distance, time = euclid_dist(products[i].sourceLatitude, products[i].sourceLongitude, products[j].sourceLatitude, products[j].sourceLongitude)
+            DistanceMatrix[productIndexDict[products[i].productID]['sourceAddress']][productIndexDict[products[j].productID]['sourceAddress']] = distance
+            TimeMatrix[productIndexDict[products[i].productID]['sourceAddress']][productIndexDict[products[j].productID]['sourceAddress']] = time
+            DistanceMatrix[productIndexDict[products[j].productID]['sourceAddress']][productIndexDict[products[i].productID]['sourceAddress']] = distance
+            TimeMatrix[productIndexDict[products[j].productID]['sourceAddress']][productIndexDict[products[i].productID]['sourceAddress']] = time
+            if ((products[i].sourceAddress == WAREHOUSE_ADDRESS) and warehousedistanceDict.get(products[j].productID) != None):
+                distance, time = warehousedistanceDict[products[j].productID]['distance'], warehousedistanceDict[products[j].productID]['time']
+            else:
+                distance, time = euclid_dist(products[i].sourceLatitude, products[i].sourceLongitude, products[j].destinationLatitude, products[j].destinationLongitude)
+            DistanceMatrix[productIndexDict[products[i].productID]['sourceAddress']][productIndexDict[products[j].productID]['destinationAddress']] = distance
+            TimeMatrix[productIndexDict[products[i].productID]['sourceAddress']][productIndexDict[products[j].productID]['destinationAddress']] = time
+            DistanceMatrix[productIndexDict[products[j].productID]['destinationAddress']][productIndexDict[products[i].productID]['sourceAddress']] = distance
+            TimeMatrix[productIndexDict[products[j].productID]['destinationAddress']][productIndexDict[products[i].productID]['sourceAddress']] = time
+            if ((products[i].sourceAddress == WAREHOUSE_ADDRESS) and (warehousedistanceDict.get(products[j].productID) == None)):
+                warehousedistanceDict[products[j].productID] = {}
+                warehousedistanceDict[products[j].productID]['distance'] = distance
+                warehousedistanceDict[products[j].productID]['time'] = time
+            if ((products[j].sourceAddress == WAREHOUSE_ADDRESS) and warehousedistanceDict.get(products[i].productID) != None):
+                distance, time = warehousedistanceDict[products[i].productID]['distance'], warehousedistanceDict[products[i].productID]['time']
+            else:
+                distance, time = euclid_dist(products[i].destinationLatitude, products[i].destinationLongitude, products[j].sourceLatitude, products[j].sourceLongitude)
+            DistanceMatrix[productIndexDict[products[i].productID]['destinationAddress']][productIndexDict[products[j].productID]['sourceAddress']] = distance
+            TimeMatrix[productIndexDict[products[i].productID]['destinationAddress']][productIndexDict[products[j].productID]['sourceAddress']] = time
+            DistanceMatrix[productIndexDict[products[j].productID]['sourceAddress']][productIndexDict[products[i].productID]['destinationAddress']] = distance
+            TimeMatrix[productIndexDict[products[j].productID]['sourceAddress']][productIndexDict[products[i].productID]['destinationAddress']] = time
+            if ((products[j].sourceAddress == WAREHOUSE_ADDRESS) and (warehousedistanceDict.get(products[i].productID) == None)):
+                warehousedistanceDict[products[i].productID] = {}
+                warehousedistanceDict[products[i].productID]['distance'] = distance
+                warehousedistanceDict[products[i].productID]['time'] = time
+            distance, time = euclid_dist(products[i].destinationLatitude, products[i].destinationLongitude, products[j].destinationLatitude, products[j].destinationLongitude)
+            DistanceMatrix[productIndexDict[products[i].productID]['destinationAddress']][productIndexDict[products[j].productID]['destinationAddress']] = distance
+            TimeMatrix[productIndexDict[products[i].productID]['destinationAddress']][productIndexDict[products[j].productID]['destinationAddress']] = time
+            DistanceMatrix[productIndexDict[products[j].productID]['destinationAddress']][productIndexDict[products[i].productID]['destinationAddress']] = distance
+            TimeMatrix[productIndexDict[products[j].productID]['destinationAddress']][productIndexDict[products[i].productID]['destinationAddress']] = time
+    return {"data" : {"TimeMatrix" : TimeMatrix, "DistanceMatrix" : DistanceMatrix, "productIndexDict" : productIndexDict, "productAtHUb" : productAtHub }}
+
+def master(productsNum):
     destinationPoints = getDestinationPoints()
-    sourcemeans = CalculateMeans(drivers, sourcePoints)
-    destinationmeans = CalculateMeans(drivers, destinationPoints)
-    sourceclusters = FindClusters(sourcemeans, sourcePoints)
-    destinationclusters = FindClusters(destinationmeans, destinationPoints)
-    sourceresult = pathForSourceClusters(sourceclusters)
-    destinationresult = pathForDestinationClusters(destinationclusters)
-    if sourceresult["TotalDuration"] > destinationresult["TotalDuration"]:
-        finalResult = destinationresult
-    else:
-        finalResult = sourceresult
-    return finalResult
+    data = DistanceTimeMatrix()
+    time = 10000000000000
+    res = -1
+    for i in range((productsNum//3), (productsNum//2)+1):
+        clusters = cluster(destinationPoints, i)
+        destinationresult = pathForDestinationClusters(clusters, data)
+        if destinationresult["data"]["TotalDuration"] < time:
+            time = destinationresult["data"]["TotalDuration"]
+            res = destinationresult["data"]
+        print(destinationresult)
+    return res
 
 def getcurrentPoint(path):
     if len(path) == 0:
@@ -140,7 +178,7 @@ def driverDetails(add):
     drivers = Driver.objects.filter(active=True)
     driverDetails = {}
     for i in drivers:
-        if len(i.path) != 0:
+        if i.path:
             jsondec = json.decoder.JSONDecoder()
             driverPath = jsondec.decode(i.path)
         else:

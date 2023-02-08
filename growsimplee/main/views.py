@@ -9,6 +9,9 @@ import requests
 from django.db.models import Q
 import json
 from .fixedValues import WAREHOUSE_ADDRESS
+import os
+import base64
+from .ml import getVolume
 
 # Create your views here.
 
@@ -23,8 +26,10 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMi
 
     def load(self):
         dataframe1 = pd.read_excel('bangalore_pickups.xlsx')
-        dataframe2 = pd.read_excel('bangalore_dispatch_address_finals.xlsx')
+        dataframe2 = pd.read_excel('bangalore dispatch address.xlsx')
         productDict = {}
+        print(dataframe1)
+        print(dataframe2)
         for ind in dataframe1.index:
             productDict[dataframe1['product_id'][ind]]={}
             productDict[dataframe1['product_id'][ind]]["productID"]=dataframe1['product_id'][ind]
@@ -132,8 +137,8 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMi
         if serializer.is_valid():
             serializer.save()
             headers = self.get_success_headers(serializer.data)
-            result = master()
-            driverlist = self.createDrivers(len(productDetails)//25)
+            result = master(len(productDetails))
+            driverlist = self.createDrivers(len(productDetails)//2)
             serializer = DriverSerializer(data = driverlist, many=True)
             if serializer.is_valid():
                 serializer.save()
@@ -303,6 +308,53 @@ class ReachedView(mixins.UpdateModelMixin, generics.GenericAPIView):
 class ValidateImageView(mixins.UpdateModelMixin, generics.GenericAPIView):
     queryset = Driver.objects.all()
     serializer_class = DriverUpdateSerializer
+
+    def saveimages(self, request):
+        product = request.data
+        file_path = os.path.abspath(os.getcwd())
+        file_path = file_path + "/Images/" + product["productID"]+ "/"
+        isExist = os.path.exists(file_path)
+        if not isExist:
+            os.makedirs(file_path)
+        file_name1 = "top.jpeg"
+        file_name2 = "side.jpeg"
+        files_path = os.path.join(file_path, file_name1)
+        x = product["topImage"].split(",")
+        fh = open(files_path, "wb")
+        fh.write(base64.b64decode(x[1]))
+        fh.close()
+        x = product["sideImage"].split(",")
+        files_path = os.path.join(file_path, file_name2)
+        fh = open(files_path, "wb")
+        fh.write(base64.b64decode(x[1]))
+        fh.close()
+        return "yes"
+    
+    def verifyImages(self, request):
+        product = request.data
+        file_path = os.path.abspath(os.getcwd())
+        file_path = file_path + "/Images/" + product["productID"]+ "/"
+        file_name1 = "top.jpeg"
+        file_name2 = "side.jpeg"
+        filepath1 = os.path.join(file_path, file_name1)
+        filepath2 = os.path.join(file_path, file_name2)
+        volume = getVolume(filepath1, filepath2)
+        return volume
+    
+    def post(self, request):
+        save = self.saveimages(request)
+        if save == "yes":
+            volume = self.verifyImages(request)
+            productID = request.data["productID"]
+            productDict = {
+                "productID" : productID,
+                "volume" : volume
+            }
+            instance = Product.objects.get(productID=productID)
+            serializer = ProductSerializer(instance, data=productDict)
+            if serializer.is_valid():
+                self.perform_update(serializer)
+                return response.Response(status=status.HTTP_200_OK)
 
 class ManualEditView(mixins.UpdateModelMixin, mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):
     queryset = Driver.objects.all()
