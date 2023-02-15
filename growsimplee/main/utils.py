@@ -15,13 +15,16 @@ def cluster(points, num):
 	return pointList
 
 def euclid_dist(x1, y1, x2, y2):
-	baseurl = f"https://maps.googleapis.com/maps/api/distancematrix/json?units=imperial&origins={x1},{y1}&destinations={x2}%2C{y2}&key={GOOGLE_API_KEY}"
-	res = requests.get(baseurl)
-	data = res.json()
-	print(data)
-	distance = data['rows'][0]['elements'][0]['distance']['value']
-	time = data['rows'][0]['elements'][0]['duration']['value']
-	return distance, time
+	try:
+		baseurl = f"https://maps.googleapis.com/maps/api/distancematrix/json?units=imperial&origins={x1},{y1}&destinations={x2}%2C{y2}&key={GOOGLE_API_KEY}"
+		res = requests.get(baseurl)
+		data = res.json()
+		print(data)
+		distance = data['rows'][0]['elements'][0]['distance']['value']
+		time = data['rows'][0]['elements'][0]['duration']['value']
+		return distance, time
+	except:
+		return 1000, 600
 
 def driverListResponse():
 	drivers = Driver.objects.all()

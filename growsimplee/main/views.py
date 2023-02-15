@@ -14,6 +14,9 @@ import base64
 from .ml import getVolume
 from .graph import makeImg
 from .utils import driverListResponse
+import io
+import shapely.geometry, shapely.wkt
+import numpy as np
 
 # Create your views here.
 
@@ -165,6 +168,9 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMi
                 else:
                     j.append(product.destinationLatitude)
                     j.append(product.destinationLongitude)
+        for i in range(len(a)):  
+            df = pd.DataFrame(a[i], columns = ["Product-ID", "S/D" , 'Latitude', 'Longitude'])
+            df.to_csv('P'+str(i)+'.csv')
             
 
     def post(self, request):
@@ -174,7 +180,7 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMi
             serializer.save()
             headers = self.get_success_headers(serializer.data)
             result = master(len(productDetails))
-            driverlist = self.createDrivers(len(productDetails)//2)
+            driverlist = self.createDrivers(len(productDetails)//20)
             serializer = DriverSerializer(data = driverlist, many=True)
             if serializer.is_valid():
                 serializer.save()
@@ -188,7 +194,18 @@ class start(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMi
                         self.perform_update(serializer)
                         list_of_paths = self.plotGraph(result)
                         makeImg(list_of_paths)
+                        self.csvResponse(result)
                         res = driverListResponse()
+                        myfile = open('report.txt', 'a')
+                        myfile.write(f'No. of products : {len(productDetails)}\n')
+                        count = 0
+                        for i in result['result']:
+                            if i != []:
+                                count += 1
+                        myfile.write(f'No. of riders : {count}\n')
+                        myfile.write(f"Avg distance travelled by each driver : {str(result['distanceTravelled']/count)}\n")
+                        myfile.write(f"Avg time travelled by each driver : {result['TotalDuration']/count}")
+                        myfile.write(f"Total distance : {result['distanceTravelled']}")
                         return response.Response(res, status=status.HTTP_201_CREATED, headers=headers)
 
 

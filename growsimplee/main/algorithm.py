@@ -132,8 +132,8 @@ def master(productsNum):
     destinationPoints = getDestinationPoints()
     data = DistanceTimeMatrix()
     time = 10000000000000
-    res = -1
-    for i in range((productsNum//3), (productsNum//2)+1):
+    res = {}
+    for i in range((productsNum//30), (productsNum//20)+1):
         clusters = cluster(destinationPoints, i)
         destinationresult = pathForDestinationClusters(clusters, data)
         if destinationresult["data"]["TotalDuration"] < time:

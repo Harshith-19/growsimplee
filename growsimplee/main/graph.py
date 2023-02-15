@@ -25,5 +25,4 @@ def makeImg(driverroutes):
 
         plt.axis(False)  
         plt.savefig('imgname')
-        plt.show()
 
